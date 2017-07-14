@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os/exec"
+	"runtime"
 
 	"github.com/gorilla/websocket"
 )
@@ -32,8 +34,24 @@ func main() {
 
 	// handle websocket
 	http.HandleFunc("/ws", wshandler)
+	http.Handle("/", http.FileServer(http.Dir("site/dist")))
+
+	// open browser
+	go browse("localhost:8505")
+
 	// start listening on port 8505
 	log.Fatal(http.ListenAndServe(":8505", nil))
+}
+
+func browse(url string) error {
+	var err error
+	switch runtime.GOOS {
+	case "linux":
+		err = exec.Command("xdg-open", "http://localhost:8505/").Start()
+	default:
+		log.Println("Go to http://localhost:8505/ to access server")
+	}
+	return err
 }
 
 // websocket handler: /ws?port=14550&protocol=udp
