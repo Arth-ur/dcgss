@@ -1,6 +1,6 @@
 <template lang="pug">
 draggable.dcgss-mavlink-list(
-    v-model="mavmsg",
+    v-model="sortedMavmsg",
     :options="{sort:false,group:{name:'mavlink',pull:'clone',put:false}}"
     @update=""
     @start="drag=true",
@@ -17,19 +17,15 @@ export default {
     draggable,
   },
   data() {
-    return {
-      mavmsg: [
-        { name: 'HEARTBEAT' },
-        { name: 'SYS_STATUS' },
-        { name: 'SYSTEM_TIME' },
-      ],
-    };
+    return {};
   },
   computed: {
     sortedMavmsg() {
-      return this.mavmsg.sort((a, b) => a.name.localeCompare(b.name));
+      return Object.values(this.$store.state.mavlinkx.mavlink).sort(
+        (a, b) => a.name.localeCompare(b.name));
     },
   },
+
 };
 </script>
 
