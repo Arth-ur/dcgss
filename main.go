@@ -1,4 +1,5 @@
 // dcgsscmd project main.go
+// Quickstart: ws = new WebSocket("ws://localhost:8505/ws?port=14550&protocol=udp")
 package main
 
 import (
@@ -9,6 +10,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// UDP servers mapped by port	 numbers
+var serverUDP map[string]*net.UDPConn
+
+// MAVLink channels
+var channelMAVLink map[string]chan []byte
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -18,6 +25,11 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 	log.Println("drone course ground station (dcgss) started")
+
+	// variable initialisation
+	serverUDP = make(map[string]*net.UDPConn)
+	channelMAVLink = make(map[string]chan []byte)
+
 	// handle websocket
 	http.HandleFunc("/ws", wshandler)
 	// start listening on port 8505
@@ -35,23 +47,36 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// start listening on the given port
-	ServerAddr, err := net.ResolveUDPAddr("udp", ":"+port)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
+	if _, ok := serverUDP[port]; ok == false {
+		// ServerConn does not exist, we create it and add it to the map
+
+		// get random address to listen to on the given port
+		ServerAddr, err := net.ResolveUDPAddr("udp", ":"+port)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// start listening
+		ServerConn, err := net.ListenUDP("udp", ServerAddr)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// add connection to the map
+		serverUDP[port] = ServerConn
+
+		// create channel and add to the map
+		MAVLinkChannel := make(chan []byte, 8)
+		channelMAVLink[port] = MAVLinkChannel
+
+		// start routine
+		go udpHandler(MAVLinkChannel, ServerConn)
 	}
 
-	// start listening
-	ServerConn, err := net.ListenUDP("udp", ServerAddr)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	defer ServerConn.Close()
-
-	// buffer to read the incoming data from the udp connection
-	buf := make([]byte, 1024)
+	// retrieve MAVLinkChannel from map
+	MAVLinkChannel := channelMAVLink[port]
 
 	// upgrade connection
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -60,6 +85,20 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// read incoming MAVLink message from channel
+	for buf := range MAVLinkChannel {
+		// write them to the opened websocket
+		if err := conn.WriteMessage(websocket.BinaryMessage, buf); err != nil {
+			log.Println(err)
+			return
+		}
+	}
+}
+
+func udpHandler(ch chan<- []byte, ServerConn *net.UDPConn) {
+	// buffer to read the incoming data from the udp connection
+	buf := make([]byte, 1024)
+	warned := false
 	for {
 		// read incomming MAVLink message from udp
 		n, _, err := ServerConn.ReadFromUDP(buf)
@@ -68,10 +107,14 @@ func wshandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// write them to the opened websocket
-		if err := conn.WriteMessage(websocket.BinaryMessage, buf[0:n]); err != nil {
-			log.Println(err)
-			return
+		// send to channel
+		select {
+		case ch <- buf[0:n]:
+		default:
+			if warned == false {
+				log.Println("Channel is full, message has been discarded.")
+				warned = true
+			}
 		}
 	}
 }
