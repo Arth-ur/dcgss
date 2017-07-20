@@ -1,0 +1,61 @@
+bind-data:
+  cmds:
+    - go-bindata-assetfs -prefix site/ site/dist/...
+
+gen-checksums:
+  cmds:
+    - sha256sum {{.FILE}} | head -c 64 > {{.FILE}}.sha256
+    - openssl dgst -sha256 -sign private_key.pem -out {{.FILE}}.sig {{.FILE}}
+
+build-release:
+  cmds:
+    - GOOS={{.GOOS}} GOARCH={{.GOARCH}} go build -o {{.OUTPUTDIR}}/{{.SOFTWARE}}_{{.VERSION}}_{{.GOOS}}_{{.GOARCH}}.{{.EXTENSION}}
+    - task: gen-checksums
+      vars: {FILE: "{{.OUTPUTDIR}}/{{.SOFTWARE}}_{{.VERSION}}_{{.GOOS}}_{{.GOARCH}}.{{.EXTENSION}}"}
+
+create-index:
+  cmds:
+    - ls dist/ > dist/index.txt
+
+build:
+  deps: [bind-data]
+  vars:
+    revisioncount: $git log --oneline | wc -l
+    OUTPUTDIR: dist
+    SOFTWARE: dcgss
+    VERSION: $tail -n 1 version.go | cut -d '"' -f 2
+  cmds:
+    - mkdir -p dist
+    - task: build-release
+      vars: 
+        GOOS: linux
+        GOARCH: amd64
+        EXTENSION: run
+        VERSION: "{{.VERSION}}"
+        OUTPUTDIR: "{{.OUTPUTDIR}}"
+        SOFTWARE: "{{.SOFTWARE}}"
+    - task: build-release
+      vars: 
+        GOOS: windows
+        GOARCH: amd64
+        EXTENSION: run
+        VERSION: "{{.VERSION}}"
+        OUTPUTDIR: "{{.OUTPUTDIR}}"
+        SOFTWARE: "{{.SOFTWARE}}"
+    - task: build-release
+      vars: 
+        GOOS: darwin
+        GOARCH: amd64
+        EXTENSION: run
+        VERSION: "{{.VERSION}}"
+        OUTPUTDIR: "{{.OUTPUTDIR}}"
+        SOFTWARE: "{{.SOFTWARE}}"
+    - task: create-index
+
+clean:
+  cmds:
+    - rm -rf dist/*
+
+default:
+  cmds:
+    - task: build

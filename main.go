@@ -3,13 +3,17 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
+	"syscall"
 
 	"github.com/gorilla/websocket"
+	"github.com/kardianos/osext"
 )
 
 // UDP servers mapped by port	 numbers
@@ -27,6 +31,20 @@ var upgrader = websocket.Upgrader{
 
 func main() {
 	log.Println("drone course ground station (dcgss) started")
+	log.Println("Version: " + VERSION)
+
+	if err := checkUpdate(); err != nil {
+		log.Println(err)
+	} else {
+		// restart
+		executable, err := osext.Executable()
+		if err != nil {
+			log.Fatalln(err)
+		}
+		if err := syscall.Exec(executable, os.Args, os.Environ()); err != nil {
+			log.Fatalln(err)
+		}
+	}
 
 	// variable initialisation
 	serverUDP = make(map[string]*net.UDPConn)
@@ -34,7 +52,13 @@ func main() {
 
 	// handle websocket
 	http.HandleFunc("/ws", wshandler)
-	http.Handle("/", http.FileServer(http.Dir("site/dist")))
+	//handle version
+	http.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		fmt.Fprint(w, VERSION)
+	})
+	// handle files
+	http.Handle("/", http.FileServer(assetFS()))
 
 	// open browser
 	go browse("localhost:8505")

@@ -1,2 +1,4 @@
 *.exe
 dcgss
+private_key.pem
+dist/

@@ -12,6 +12,8 @@ div#app
       div.left-bar-title Infos
       div
         small Throttling: {{throttling}}ms
+        br
+        small Version: {{version}}
     div.pure-u-1.pure-u-md-4-5.boxes
         MAVLinkBoxes
 
@@ -34,10 +36,26 @@ export default {
       console.log(port);
     },
   },
+  data() {
+    return {
+      checkVersionInterval: null,
+    };
+  },
   computed: {
     throttling() {
       return this.$store.state.throttling;
     },
+    version() {
+      return this.$store.state.version;
+    },
+  },
+  mounted() {
+    this.checkVersionInterval = setInterval(
+      () => this.$store.dispatch('checkVersion'), 3000);
+    this.$store.dispatch('checkVersion');
+  },
+  beforeDestroy() {
+    clearInterval(this.checkVersionInterval);
   },
 };
 </script>
